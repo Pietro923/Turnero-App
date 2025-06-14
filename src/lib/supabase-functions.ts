@@ -423,3 +423,114 @@ export async function getDashboardStats(dateFrom?: string, dateTo?: string) {
     throw error
   }
 }
+
+// ===============================
+// FUNCIONES PARA GESTIÓN DE PELUQUEROS
+// ===============================
+
+export async function getBarbersWithServices() {
+  const { data, error } = await supabase
+    .from('barbers')
+    .select(`
+      *,
+      barber_services (
+        id,
+        custom_price,
+        active,
+        service:services (
+          id,
+          name,
+          duration,
+          price
+        )
+      )
+    `)
+    .eq('active', true)
+    .order('name')
+
+  if (error) throw error
+  return data
+}
+
+export async function getServicesByBarber(barberId: number) {
+  const { data, error } = await supabase
+    .from('barber_services')
+    .select(`
+      id,
+      custom_price,
+      active,
+      service:services (
+        id,
+        name,
+        duration,
+        price
+      )
+    `)
+    .eq('barber_id', barberId)
+    .eq('active', true)
+
+  if (error) throw error
+  return data
+}
+
+export async function assignServiceToBarber(barberId: number, serviceId: number, customPrice?: number) {
+  const { data, error } = await supabase
+    .from('barber_services')
+    .upsert([{
+      barber_id: barberId,
+      service_id: serviceId,
+      custom_price: customPrice || null,
+      active: true
+    }])
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function removeServiceFromBarber(barberId: number, serviceId: number) {
+  const { data, error } = await supabase
+    .from('barber_services')
+    .update({ active: false })
+    .eq('barber_id', barberId)
+    .eq('service_id', serviceId)
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function updateBarberServicePrice(barberId: number, serviceId: number, customPrice: number | null) {
+  const { data, error } = await supabase
+    .from('barber_services')
+    .update({ custom_price: customPrice })
+    .eq('barber_id', barberId)
+    .eq('service_id', serviceId)
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+// Función para obtener servicios disponibles para asignar a un peluquero
+export async function getAvailableServicesForBarber(barberId: number) {
+  const { data, error } = await supabase
+    .from('services')
+    .select(`
+      *,
+      barber_services!left (
+        id,
+        active
+      )
+    `)
+    .eq('active', true)
+    .or(`barber_services.barber_id.neq.${barberId},barber_services.active.eq.false,barber_services.id.is.null`)
+
+  if (error) throw error
+  return data.filter(service => 
+    !service.barber_services?.some((bs: any) => bs.active)
+  )
+}
