@@ -12,9 +12,48 @@ export async function getBarbers() {
     .select('*')
     .eq('active', true)
     .order('name')
-
+  
   if (error) throw error
   return data as Barber[]
+}
+
+export async function createBarber(barber: {
+  name: string
+  emoji: string
+  specialty?: string
+}) {
+  const { data, error } = await supabase
+    .from('barbers')
+    .insert([barber])
+    .select('*')
+    .single()
+  
+  if (error) throw error
+  return data as Barber
+}
+
+export async function updateBarber(id: number, updates: Partial<Barber>) {
+  const { data, error } = await supabase
+    .from('barbers')
+    .update(updates)
+    .eq('id', id)
+    .select('*')
+    .single()
+  
+  if (error) throw error
+  return data as Barber
+}
+
+export async function deleteBarber(id: number) {
+  const { data, error } = await supabase
+    .from('barbers')
+    .update({ active: false })
+    .eq('id', id)
+    .select('*')
+    .single()
+  
+  if (error) throw error
+  return data as Barber
 }
 
 // ===============================
@@ -27,9 +66,48 @@ export async function getServices() {
     .select('*')
     .eq('active', true)
     .order('name')
-
+  
   if (error) throw error
   return data as Service[]
+}
+
+export async function createService(service: {
+  name: string
+  duration: number
+  price: number
+}) {
+  const { data, error } = await supabase
+    .from('services')
+    .insert([service])
+    .select('*')
+    .single()
+  
+  if (error) throw error
+  return data as Service
+}
+
+export async function updateService(id: number, updates: Partial<Service>) {
+  const { data, error } = await supabase
+    .from('services')
+    .update(updates)
+    .eq('id', id)
+    .select('*')
+    .single()
+  
+  if (error) throw error
+  return data as Service
+}
+
+export async function deleteService(id: number) {
+  const { data, error } = await supabase
+    .from('services')
+    .update({ active: false })
+    .eq('id', id)
+    .select('*')
+    .single()
+  
+  if (error) throw error
+  return data as Service
 }
 
 // ===============================
@@ -51,9 +129,13 @@ export async function createAppointment(appointment: {
       ...appointment,
       status: 'confirmed'
     }])
-    .select('*')
+    .select(`
+      *,
+      barber:barbers(*),
+      service:services(*)
+    `)
     .single()
-
+  
   if (error) throw error
   return data as Appointment
 }
@@ -140,19 +222,34 @@ export async function updateAppointmentStatus(
   status: Appointment['status'],
   paymentStatus?: Appointment['payment_status'],
   paymentMethod?: Appointment['payment_method'],
-  notes?: string
+  notes?: string,
+  cancelReason?: string // NUEVO: para motivos de cancelación
 ) {
   const updates: any = { status }
   
   if (paymentStatus) updates.payment_status = paymentStatus
   if (paymentMethod) updates.payment_method = paymentMethod
   if (notes !== undefined) updates.notes = notes
+  
+  // Si es una cancelación y se proporciona motivo
+  if (status === 'cancelled' && cancelReason) {
+    updates.notes = cancelReason
+  }
+  
+  // Si es no_show y se proporciona motivo
+  if (status === 'no_show' && cancelReason) {
+    updates.notes = cancelReason
+  }
 
   const { data, error } = await supabase
     .from('appointments')
     .update(updates)
     .eq('id', appointmentId)
-    .select('*')
+    .select(`
+      *,
+      barber:barbers(*),
+      service:services(*)
+    `)
     .single()
 
   if (error) throw error
@@ -160,7 +257,65 @@ export async function updateAppointmentStatus(
 }
 
 export async function cancelAppointment(appointmentId: number, reason?: string) {
-  return updateAppointmentStatus(appointmentId, 'cancelled', undefined, undefined, reason)
+  return updateAppointmentStatus(appointmentId, 'cancelled', undefined, undefined, undefined, reason)
+}
+
+// ===============================
+// FUNCIONES DE CAJA
+// ===============================
+
+export async function createCashTransaction(transaction: {
+  amount: number
+  concept: string
+  method: 'cash' | 'transfer'
+  type: 'income' | 'expense'
+}) {
+  const { data, error } = await supabase
+    .from('cash_transactions')
+    .insert([{
+      ...transaction,
+      date: new Date().toISOString().split('T')[0],
+      created_at: new Date().toISOString()
+    }])
+    .select('*')
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function getCashTransactions(filters?: {
+  dateFrom?: string
+  dateTo?: string
+  type?: 'income' | 'expense'
+  method?: 'cash' | 'transfer'
+}) {
+  let query = supabase
+    .from('cash_transactions')
+    .select('*')
+
+  if (filters?.dateFrom) {
+    query = query.gte('date', filters.dateFrom)
+  }
+  
+  if (filters?.dateTo) {
+    query = query.lte('date', filters.dateTo)
+  }
+  
+  if (filters?.type) {
+    query = query.eq('type', filters.type)
+  }
+  
+  if (filters?.method) {
+    query = query.eq('method', filters.method)
+  }
+
+  query = query.order('date', { ascending: false }).order('created_at', { ascending: false })
+
+  const { data, error } = await query
+  
+  if (error) throw error
+  return data
 }
 
 // ===============================
@@ -170,7 +325,11 @@ export async function cancelAppointment(appointmentId: number, reason?: string) 
 export async function getAppointmentStats(dateFrom?: string, dateTo?: string) {
   let query = supabase
     .from('appointments')
-    .select('status, payment_status, service:services(price)')
+    .select(`
+      status, 
+      payment_status, 
+      service:services(price)
+    `)
 
   if (dateFrom) query = query.gte('date', dateFrom)
   if (dateTo) query = query.lte('date', dateTo)
@@ -199,5 +358,68 @@ export async function getAppointmentStats(dateFrom?: string, dateTo?: string) {
       }, 0)
   }
 
-return stats
+  return stats
+}
+
+export async function getCashStats(dateFrom?: string, dateTo?: string) {
+  let query = supabase
+    .from('cash_transactions')
+    .select('type, method, amount')
+
+  if (dateFrom) query = query.gte('date', dateFrom)
+  if (dateTo) query = query.lte('date', dateTo)
+
+  const { data, error } = await query
+
+  if (error) throw error
+
+  const stats = {
+    total_income: data
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0),
+    total_expense: data
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0),
+    cash_income: data
+      .filter(t => t.type === 'income' && t.method === 'cash')
+      .reduce((sum, t) => sum + t.amount, 0),
+    transfer_income: data
+      .filter(t => t.type === 'income' && t.method === 'transfer')
+      .reduce((sum, t) => sum + t.amount, 0),
+    cash_expense: data
+      .filter(t => t.type === 'expense' && t.method === 'cash')
+      .reduce((sum, t) => sum + t.amount, 0),
+    transfer_expense: data
+      .filter(t => t.type === 'expense' && t.method === 'transfer')
+      .reduce((sum, t) => sum + t.amount, 0)
+  }
+
+  return {
+    ...stats,
+    net_result: stats.total_income - stats.total_expense
+  }
+}
+
+// ===============================
+// FUNCIONES COMBINADAS
+// ===============================
+
+export async function getDashboardStats(dateFrom?: string, dateTo?: string) {
+  try {
+    const [appointmentStats, cashStats] = await Promise.all([
+      getAppointmentStats(dateFrom, dateTo),
+      getCashStats(dateFrom, dateTo)
+    ])
+
+    return {
+      appointments: appointmentStats,
+      cash: cashStats,
+      total_revenue: appointmentStats.revenue + cashStats.total_income,
+      total_expense: cashStats.total_expense,
+      net_profit: (appointmentStats.revenue + cashStats.total_income) - cashStats.total_expense
+    }
+  } catch (error) {
+    console.error('Error getting dashboard stats:', error)
+    throw error
+  }
 }

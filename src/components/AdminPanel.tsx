@@ -1,24 +1,8 @@
+// AdminPanel.tsx - Versión actualizada con todos los componentes
+
 "use client"
-import React, { useState, useEffect } from 'react';
-import { 
-  Calendar, 
-  Clock, 
-  User, 
-  Phone, 
-  Check, 
-  X, 
-  DollarSign, 
-  CreditCard, 
-  Banknote,
-  Search,
-  Filter,
-  Eye,
-  RefreshCw,
-  AlertCircle,
-  TrendingUp,
-  Users,
-  CheckCircle2
-} from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { RefreshCw, Calendar, CheckCircle2, Clock, DollarSign, Phone, Banknote, CreditCard } from 'lucide-react';
 import { 
   getAllAppointments, 
   updateAppointmentStatus, 
@@ -27,51 +11,70 @@ import {
 } from '@/lib/supabase-functions';
 import type { Appointment, Barber } from '@/lib/supabase';
 
+// Importar componentes
+import ActionButtons from '@/components/Admin/ActionButtons';
+import ManualAppointmentDialog from '@/components/Admin/ManualAppointmentDialog';
+import PaymentHistory from '@/components/Admin/PaymentHistory';
+import QuickCashRegister from '@/components/Admin/QuickCashRegister';
+import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import CancelDialog from './Admin/CancelDialog';
+
 const AdminPanel = () => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
+  const [services, setServices] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<number | null>(null);
   const [dateInput, setDateInput] = useState('');
+
+  // Referencias para controlar modales con atajos
+  const manualDialogRef = useRef<HTMLButtonElement>(null);
+  const cashRegisterRef = useRef<HTMLButtonElement>(null);
+  const historyRef = useRef<HTMLButtonElement>(null);
+
   // Filtros
   const [filters, setFilters] = useState({
-    date: '', // Vacío por defecto = mostrar todos
+    date: '',
     status: 'all',
     barberId: 'all'
   });
 
+  // Atajos de teclado
+  useKeyboardShortcuts({
+    onF1: () => manualDialogRef.current?.click(),
+    onF2: () => cashRegisterRef.current?.click(),
+    onF3: () => historyRef.current?.click(),
+    onCtrlR: () => loadData(),
+  });
+
+  // Effects para debounce y loading
   useEffect(() => {
-  const timer = setTimeout(() => {
-    // Solo actualizar si la fecha es válida (formato completo YYYY-MM-DD) o está vacía
-    if (dateInput === '' || dateInput.match(/^\d{4}-\d{2}-\d{2}$/)) {
-      setFilters(prev => ({ ...prev, date: dateInput }));
-    }
-  }, 500); // Espera 500ms después de que pare de escribir
+    const timer = setTimeout(() => {
+      if (dateInput === '' || dateInput.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        setFilters(prev => ({ ...prev, date: dateInput }));
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [dateInput]);
 
-  return () => clearTimeout(timer);
-}, [dateInput]);
+  useEffect(() => {
+    loadData();
+  }, [filters]);
 
-useEffect(() => {
-  loadData();
-}, [filters]);
-
-// Inicializar dateInput cuando cambian los filtros desde botones
-useEffect(() => {
-  setDateInput(filters.date);
-}, [filters.date]);
+  useEffect(() => {
+    setDateInput(filters.date);
+  }, [filters.date]);
 
   const loadData = async () => {
-  // Agregar esta validación al inicio
-  if (filters.date && (filters.date.length < 10 || isNaN(Date.parse(filters.date)))) {
-    console.log('Fecha incompleta o inválida, esperando...');
-    return;
-  }
+    if (filters.date && (filters.date.length < 10 || isNaN(Date.parse(filters.date)))) {
+      console.log('Fecha incompleta o inválida, esperando...');
+      return;
+    }
 
-  try {
+    try {
       setLoading(true);
-      
-      console.log('🔍 Filtros actuales:', filters);
       
       const [appointmentsData, barbersData, statsData] = await Promise.all([
         getAllAppointments({
@@ -81,12 +84,8 @@ useEffect(() => {
           limit: 50
         }),
         getBarbers(),
-        getAppointmentStats() // Sin filtros de fecha para stats generales
+        getAppointmentStats()
       ]);
-
-      console.log('📅 Turnos encontrados:', appointmentsData);
-      console.log('👥 Peluqueros:', barbersData);
-      console.log('📊 Stats:', statsData);
 
       setAppointments(appointmentsData);
       setBarbers(barbersData);
@@ -110,7 +109,6 @@ useEffect(() => {
       
       await updateAppointmentStatus(appointmentId, status, paymentStatus, paymentMethod);
       
-      // Actualizar la lista local
       setAppointments(prev => 
         prev.map(apt => 
           apt.id === appointmentId 
@@ -124,7 +122,6 @@ useEffect(() => {
         )
       );
 
-      // Recargar stats - si hay fecha específica, usar esa, sino stats generales
       const newStats = filters.date 
         ? await getAppointmentStats(filters.date, filters.date)
         : await getAppointmentStats();
@@ -136,6 +133,43 @@ useEffect(() => {
     } finally {
       setUpdating(null);
     }
+  };
+
+  const handleCancelAppointment = async (appointmentId: number, reason: string) => {
+    try {
+      setUpdating(appointmentId);
+      
+      await updateAppointmentStatus(appointmentId, 'cancelled', undefined, undefined, reason);
+      
+      setAppointments(prev => 
+        prev.map(apt => 
+          apt.id === appointmentId 
+            ? { 
+                ...apt, 
+                status: 'cancelled',
+                notes: reason
+              }
+            : apt
+        )
+      );
+
+      const newStats = filters.date 
+        ? await getAppointmentStats(filters.date, filters.date)
+        : await getAppointmentStats();
+      setStats(newStats);
+      
+    } catch (error) {
+      console.error('Error cancelando turno:', error);
+      throw error;
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleCashTransaction = async (transaction: any) => {
+    // TODO: Implementar función para guardar transacciones de caja
+    console.log('Nueva transacción:', transaction);
+    alert('Funcionalidad de caja pendiente de implementar');
   };
 
   const getStatusColor = (status: string) => {
@@ -175,20 +209,40 @@ useEffect(() => {
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="max-w-7xl mx-auto space-y-6">
         
-        {/* Header */}
+        {/* Header con botones */}
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Panel de Administración</h1>
               <p className="text-gray-600">Gestiona los turnos de la peluquería</p>
+              <p className="text-xs text-gray-500 mt-1">
+                F1: Turno manual | F2: Caja | F3: Historial | Ctrl+R: Actualizar
+              </p>
             </div>
-            <button
-              onClick={loadData}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Actualizar
-            </button>
+            
+            <div className="flex gap-2 flex-wrap">
+              <ManualAppointmentDialog
+                ref={manualDialogRef}
+                barbers={barbers}
+                services={services}
+                onAppointmentCreated={loadData}
+              />
+              
+              <QuickCashRegister
+                ref={cashRegisterRef}
+                onAddTransaction={handleCashTransaction}
+              />
+              
+              <PaymentHistory ref={historyRef} />
+              
+              <button
+                onClick={loadData}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Actualizar
+              </button>
+            </div>
           </div>
         </div>
 
@@ -254,10 +308,9 @@ useEffect(() => {
                   Fecha
                 </label>
                 <input
-  type="date"
-  value={dateInput}
-  onChange={(e) => setDateInput(e.target.value)}
-                  placeholder="Todas las fechas"
+                  type="date"
+                  value={dateInput}
+                  onChange={(e) => setDateInput(e.target.value)}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -318,7 +371,7 @@ useEffect(() => {
           </div>
         </div>
 
-        {/* Lista de turnos */}
+        {/* Tabla de turnos */}
         <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
           <div className="p-4 border-b">
             <h3 className="text-lg font-semibold text-gray-900">
@@ -336,27 +389,13 @@ useEffect(() => {
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Hora
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Cliente
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Peluquero
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Servicio
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Estado
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Pago
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                      Acciones
-                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cliente</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Peluquero</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Servicio</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pago</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -424,61 +463,50 @@ useEffect(() => {
                       </td>
                       
                       <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          {appointment.status === 'confirmed' && (
-                            <>
-                              <button
-                                onClick={() => handleStatusUpdate(appointment.id, 'completed', 'paid', 'cash')}
-                                disabled={updating === appointment.id}
-                                className="p-1 text-green-600 hover:bg-green-100 rounded transition-colors"
-                                title="Marcar como completado y pagado en efectivo"
-                              >
-                                <Banknote className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleStatusUpdate(appointment.id, 'completed', 'paid', 'transfer')}
-                                disabled={updating === appointment.id}
-                                className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                                title="Marcar como completado y pagado por transferencia"
-                              >
-                                <CreditCard className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleStatusUpdate(appointment.id, 'no_show')}
-                                disabled={updating === appointment.id}
-                                className="p-1 text-orange-600 hover:bg-orange-100 rounded transition-colors"
-                                title="Marcar como no vino"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
-                          
-                          {appointment.status === 'completed' && appointment.payment_status === 'pending' && (
-                            <>
-                              <button
-                                onClick={() => handleStatusUpdate(appointment.id, 'completed', 'paid', 'cash')}
-                                disabled={updating === appointment.id}
-                                className="p-1 text-green-600 hover:bg-green-100 rounded transition-colors"
-                                title="Marcar como pagado en efectivo"
-                              >
-                                <Banknote className="h-4 w-4" />
-                              </button>
-                              <button
-                                onClick={() => handleStatusUpdate(appointment.id, 'completed', 'paid', 'transfer')}
-                                disabled={updating === appointment.id}
-                                className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
-                                title="Marcar como pagado por transferencia"
-                              >
-                                <CreditCard className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
+                        <TooltipProvider>
+  <div className="flex gap-2">
+    {/* Marcar como pagado en efectivo */}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          onClick={() => handleStatusUpdate(appointment.id, 'completed', 'paid', 'cash')}
+          disabled={updating === appointment.id}
+          className="p-1 text-green-600 hover:bg-green-100 rounded transition-colors"
+        >
+          <Banknote className="h-4 w-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>Completado + Pagado en efectivo</TooltipContent>
+    </Tooltip>
 
-                          {updating === appointment.id && (
-                            <RefreshCw className="h-4 w-4 animate-spin text-gray-400" />
-                          )}
-                        </div>
+    {/* Marcar como pagado por transferencia */}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          onClick={() => handleStatusUpdate(appointment.id, 'completed', 'paid', 'transfer')}
+          disabled={updating === appointment.id}
+          className="p-1 text-blue-600 hover:bg-blue-100 rounded transition-colors"
+        >
+          <CreditCard className="h-4 w-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>Completado + Pagado por transferencia</TooltipContent>
+    </Tooltip>
+
+    {/* Marcar como no vino con motivo */}
+    {/* REEMPLAZAR el Dialog anterior por el nuevo componente */}
+      <CancelDialog
+        appointmentId={appointment.id}
+        customerName={appointment.customer_name}
+        onCancel={handleCancelAppointment}
+        disabled={updating === appointment.id}
+      />
+
+      {updating === appointment.id && (
+        <RefreshCw className="h-4 w-4 animate-spin text-gray-400" />
+      )}
+  </div>
+</TooltipProvider>
                       </td>
                     </tr>
                   ))}
