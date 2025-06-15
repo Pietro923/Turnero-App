@@ -2,6 +2,8 @@
 
 "use client"
 import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { LogOut, User } from 'lucide-react';
 import { RefreshCw, Calendar, CheckCircle2, Clock, DollarSign, Phone, Banknote, CreditCard } from 'lucide-react';
 import { 
   getAllAppointments, 
@@ -22,6 +24,8 @@ import BarberManagementPanel from '@/components/Admin/BarberManagementPanel';
 
 
 const AdminPanel = () => {
+  const { user, profile, signOut, isOwner, isEmployee } = useAuth();
+  const [activeTab, setActiveTab] = useState<'turnos' | 'peluqueros'>('turnos');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [services, setServices] = useState<any[]>([]);
@@ -29,12 +33,21 @@ const AdminPanel = () => {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<number | null>(null);
   const [dateInput, setDateInput] = useState('');
-  const [activeTab, setActiveTab] = useState<'turnos' | 'peluqueros'>('turnos');
 
   // Referencias para controlar modales con atajos
   const manualDialogRef = useRef<HTMLButtonElement>(null);
   const cashRegisterRef = useRef<HTMLButtonElement>(null);
   const historyRef = useRef<HTMLButtonElement>(null);
+
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      // El redirect se maneja automáticamente por el AuthProvider
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
+  };
 
   // Filtros
   const [filters, setFilters] = useState({
@@ -227,36 +240,65 @@ return (
       <div className="bg-white rounded-lg shadow-sm border p-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Panel de Administración</h1>
-            <p className="text-gray-600">Gestiona los turnos de la peluquería</p>
-            <p className="text-xs text-gray-500 mt-1">
-              F1: Turno manual | F2: Caja | F3: Historial | Ctrl+R: Actualizar
-            </p>
-            
-            {/* Pestañas */}
-            <div className="flex gap-2 mt-3">
-              <button
-                onClick={() => setActiveTab('turnos')}
-                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'turnos'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                📅 Turnos
-              </button>
-              <button
-                onClick={() => setActiveTab('peluqueros')}
-                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === 'peluqueros'
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                👥 Peluqueros
-              </button>
+            <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-2xl font-bold text-gray-900">Panel de Administración</h1>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 bg-gray-100 px-3 py-1 rounded-full">
+                    <User className="h-4 w-4 text-gray-600" />
+                    <span className="text-sm font-medium text-gray-700">
+                      {profile?.full_name || user?.email}
+                    </span>
+                    <span className={`text-xs px-2 py-1 rounded-full ${
+                      isOwner 
+                        ? 'bg-purple-100 text-purple-700' 
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {isOwner ? 'Dueño' : 'Empleado'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleSignOut}
+                    className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    title="Cerrar sesión"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              
+              <p className="text-gray-600">Gestiona los turnos de la peluquería</p>
+              <p className="text-xs text-gray-500 mt-1">
+                F1: Turno manual | F2: Caja | F3: Historial | Ctrl+R: Actualizar
+              </p>
+              
+              {/* Pestañas - Solo mostrar Peluqueros si es Owner */}
+              <div className="flex gap-2 mt-3">
+                <button
+                  onClick={() => setActiveTab('turnos')}
+                  className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                    activeTab === 'turnos'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  📅 Turnos
+                </button>
+                
+                {/* Solo owners pueden ver la pestaña de peluqueros */}
+                {isOwner && (
+                  <button
+                    onClick={() => setActiveTab('peluqueros')}
+                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                      activeTab === 'peluqueros'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    👥 Peluqueros
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
           
           {/* Botones solo visibles en pestaña turnos */}
           {activeTab === 'turnos' && (
@@ -519,10 +561,15 @@ return (
             )}
           </div>
         </>
-      ) : (
+      ) : isOwner ? (
         // Pestaña de Peluqueros
         <BarberManagementPanel />
-      )}
+      ) : (
+        // Fallback si somehow un employee llega aquí
+          <div className="bg-white rounded-lg shadow-sm border p-8 text-center">
+            <p className="text-gray-600">No tienes permisos para acceder a esta sección.</p>
+          </div>
+        )}
     </div>
   </div>
 );

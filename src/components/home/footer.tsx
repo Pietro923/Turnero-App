@@ -1,17 +1,6 @@
 "use client"
 import React, { useState } from 'react'
-import {
-  Dialog,
-  DialogTrigger,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogClose,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
+import Login from '@/app/login/Login'
 
 const Footer = () => {
   const [email, setEmail] = useState("")
@@ -56,46 +45,7 @@ const Footer = () => {
               © 2024 Peluquería Elite. Todos los derechos reservados.
             </p>
             <div className="flex space-x-6 text-sm text-gray-400">
-              <Dialog>
-              <DialogTrigger asChild>
-                <button className="text-sm text-gray-300 hover:text-white cursor-pointer">
-                  Iniciar sesión
-                </button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[400px]">
-                <DialogHeader>
-                  <DialogTitle>Iniciar sesión</DialogTitle>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="email">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="tu@email.com"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="password">Contraseña</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="••••••••"
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button className="cursor-pointer" onClick={handleLogin}>Ingresar</Button>
-                  <DialogClose asChild>
-                  <Button className="cursor-pointer" onClick={closeLogin}>Cancelar</Button>
-                  </DialogClose>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+              <Login/>
               <a href="#" className="hover:text-white transition-colors">Política de Privacidad</a>
               <a href="#" className="hover:text-white transition-colors">Términos de Servicio</a>
             </div>
