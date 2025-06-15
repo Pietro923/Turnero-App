@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // lib/supabase-functions.ts
 import { supabase } from './supabase'
 import type { Barber, Service, Appointment } from './supabase'

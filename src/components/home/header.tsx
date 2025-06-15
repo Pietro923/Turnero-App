@@ -1,6 +1,5 @@
 "use client"
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { Scissors, Phone, MapPin, Instagram, Facebook, Menu, X, Sparkles } from 'lucide-react';
 
 const Header = () => {

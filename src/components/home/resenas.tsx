@@ -4,9 +4,9 @@ import { Star } from 'lucide-react';
 
 const Resenas = () => {
   const reviews = [
-    { text: "Excelente atención. Leandro es un genio!", author: "Juan P." },
-    { text: "María increíble con los cortes femeninos.", author: "Lucía M." },
-    { text: "Local limpio y profesional. Recomendable!", author: "Roberto S." }
+    { text: 'Excelente atención. Leandro es un genio!', author: 'Juan P.' },
+    { text: 'María increíble con los cortes femeninos.', author: 'Lucía M.' },
+    { text: 'Local limpio y profesional. Recomendable!', author: 'Roberto S.' }
   ];
 
   return (
@@ -27,7 +27,7 @@ const Resenas = () => {
       <div className="space-y-3">
         {reviews.map((review, i) => (
           <div key={i} className="bg-gray-50 p-3 rounded-lg">
-            <p className="text-sm text-gray-700 mb-1">"{review.text}"</p>
+            <p className="text-sm text-gray-700 mb-1">{review.text}</p>
             <p className="text-xs text-gray-500">— {review.author}</p>
           </div>
         ))}

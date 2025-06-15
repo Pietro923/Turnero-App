@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 import React, { useState, useEffect } from 'react';
 import { 
@@ -644,7 +645,7 @@ const openDeleteServiceModal = (service: any) => {
     <div className="py-4">
       <p className="text-gray-600">
         ¿Estás seguro de que quieres eliminar el servicio{' '}
-        <span className="font-semibold">"{serviceToDelete?.name}"</span>?
+        <span className="font-semibold">&quot;{serviceToDelete?.name}&quot;</span>?
       </p>
       <p className="text-sm text-red-600 mt-2">
         ⚠️ Esto eliminará el servicio de todos los peluqueros que lo tengan asignado.

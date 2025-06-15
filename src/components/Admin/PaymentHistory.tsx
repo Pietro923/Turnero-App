@@ -1,7 +1,7 @@
 // components/admin/PaymentHistory.tsx
 "use client"
 import React, { useState, useEffect, forwardRef } from 'react';
-import { Download, Filter, Calendar, DollarSign, CreditCard, Banknote } from 'lucide-react';
+import { Download, DollarSign, CreditCard, Banknote } from 'lucide-react';
 import {
   Dialog,
   DialogTrigger,
@@ -22,7 +22,7 @@ interface PaymentHistoryProps {
 }
 
 const PaymentHistory = forwardRef<HTMLButtonElement, PaymentHistoryProps>(
-  ({ onClose }, ref) => {
+  ({  }, ref) => {
   const [isOpen, setIsOpen] = useState(false);
   const [payments, setPayments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(false);

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // AdminPanel.tsx - Versión actualizada con todos los componentes
 
 "use client"
@@ -24,7 +25,7 @@ import BarberManagementPanel from '@/components/Admin/BarberManagementPanel';
 
 
 const AdminPanel = () => {
-  const { user, profile, signOut, isOwner, isEmployee } = useAuth();
+  const { user, profile, signOut, isOwner } = useAuth();
   const [activeTab, setActiveTab] = useState<'turnos' | 'peluqueros'>('turnos');
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);

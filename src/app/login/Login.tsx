@@ -1,4 +1,5 @@
 // components/Login.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";

@@ -1,7 +1,7 @@
 // components/admin/ManualAppointmentDialog.tsx
 "use client"
 import React, { useState, useEffect, forwardRef } from 'react';
-import { Plus, Calendar, Clock, User, Phone, Mail } from 'lucide-react';
+import { Plus, Calendar} from 'lucide-react';
 import {
   Dialog,
   DialogTrigger,

@@ -1,21 +1,8 @@
 "use client"
-import React, { useState } from 'react'
+import React from 'react'
 import Login from '@/app/login/Login'
 
 const Footer = () => {
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-
-  const handleLogin = () => {
-    console.log("Email:", email)
-    console.log("Contraseña:", password)
-    // Acá podrías llamar a Supabase o alguna API
-  }
-
-  const closeLogin = () => {
-    
-  }
-
   return (
     <footer className="mt-12 sm:mt-16 bg-gray-900 text-white">
       <div className="max-w-7xl mx-auto px-4 py-8 sm:py-12">

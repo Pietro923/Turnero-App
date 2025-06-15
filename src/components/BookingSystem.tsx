@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, User, CheckCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, Loader2 } from 'lucide-react';
 import { getBarbers, getServices, createAppointment, getBookedTimes } from '@/lib/supabase-functions';
 import type { Barber, Service } from '@/lib/supabase';
 
