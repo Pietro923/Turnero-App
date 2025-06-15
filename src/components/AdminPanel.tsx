@@ -482,7 +482,7 @@ return (
           <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
             <div className="p-4 border-b">
               <h3 className="text-lg font-semibold text-gray-900">
-                Turnos {filters.date ? `del ${new Date(filters.date).toLocaleDateString('es-AR')}` : ''}
+                Turnos {filters.date ? `del ${new Date(filters.date + 'T12:00:00').toLocaleDateString('es-AR')}` : ''}
               </h3>
             </div>
             {appointments.length === 0 ? (
