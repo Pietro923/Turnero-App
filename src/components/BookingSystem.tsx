@@ -1,19 +1,20 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, Loader2 } from 'lucide-react';
-import { getBarbers, getServices, createAppointment, getBookedTimes } from '@/lib/supabase-functions';
-import type { Barber, Service } from '@/lib/supabase';
+import { getBarbers, createAppointment, getBookedTimes, getServicesByBarber, checkAvailability } from '@/lib/supabase-functions';
+import type { Barber } from '@/lib/supabase';
 
 const BookingSystem = () => {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [loadingServices, setLoadingServices] = useState(false);
   const [barbers, setBarbers] = useState<Barber[]>([]);
-  const [services, setServices] = useState<Service[]>([]);
+  const [services, setServices] = useState<any[]>([]);
   const [bookedTimes, setBookedTimes] = useState<string[]>([]);
   
   const [booking, setBooking] = useState({
     barber: null as Barber | null,
-    service: null as Service | null,
+    service: null as any | null,
     date: '',
     time: '',
     name: '',
@@ -23,10 +24,17 @@ const BookingSystem = () => {
 
   const times = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00'];
 
-  // Cargar datos iniciales
+  // Cargar datos iniciales (solo peluqueros)
   useEffect(() => {
     loadInitialData();
   }, []);
+
+  // Cargar servicios cuando se selecciona un peluquero
+  useEffect(() => {
+    if (booking.barber) {
+      loadBarberServices();
+    }
+  }, [booking.barber]);
 
   // Cargar horarios ocupados cuando cambia la fecha o peluquero
   useEffect(() => {
@@ -38,12 +46,8 @@ const BookingSystem = () => {
   const loadInitialData = async () => {
     try {
       setLoading(true);
-      const [barbersData, servicesData] = await Promise.all([
-        getBarbers(),
-        getServices()
-      ]);
+      const barbersData = await getBarbers();
       setBarbers(barbersData);
-      setServices(servicesData);
     } catch (error) {
       console.error('Error loading data:', error);
       alert('Error cargando datos. Por favor recarga la página.');
@@ -52,16 +56,39 @@ const BookingSystem = () => {
     }
   };
 
-  const loadBookedTimes = async () => {
-    if (!booking.date || !booking.barber) return;
+  const loadBarberServices = async () => {
+    if (!booking.barber) return;
     
     try {
-      const times = await getBookedTimes(booking.date, booking.barber.id);
-      setBookedTimes(times);
+      setLoadingServices(true);
+      const barberServices = await getServicesByBarber(booking.barber.id);
+      setServices(barberServices);
     } catch (error) {
-      console.error('Error loading booked times:', error);
+      console.error('Error loading barber services:', error);
+      alert('Error cargando servicios del peluquero.');
+    } finally {
+      setLoadingServices(false);
     }
   };
+
+  const loadBookedTimes = async () => {
+  if (!booking.date || !booking.barber) return;
+  
+  try {
+    console.log(`🔍 Cargando horarios ocupados para ${booking.barber.name} el ${booking.date}`);
+    const times = await getBookedTimes(booking.date, booking.barber.id);
+    console.log(`⏰ Horarios ocupados encontrados:`, times);
+    
+    // 🔧 SOLUCIÓN: Convertir formato "09:30:00" a "09:30"
+    const cleanTimes = times.map(time => time.substring(0, 5));
+    console.log(`⏰ Horarios limpios:`, cleanTimes);
+    
+    setBookedTimes(cleanTimes);
+  } catch (error) {
+    console.error('Error loading booked times:', error);
+    setBookedTimes([]);
+  }
+};
 
   const getDates = () => {
     const dates = [];
@@ -80,8 +107,36 @@ const BookingSystem = () => {
     return dates;
   };
 
+  const handleBarberSelect = (barber: Barber) => {
+    setBooking({ 
+      ...booking, 
+      barber, 
+      service: null // Resetear servicio cuando cambia peluquero
+    });
+    setServices([]); // Limpiar servicios anteriores
+  };
+
+  const handleDateSelect = (date: string) => {
+    setBooking({ ...booking, date, time: '' }); // Limpiar hora cuando cambia fecha
+    setBookedTimes([]); // Limpiar horarios anteriores
+  };
+
   const handleNext = () => {
     if (step < 4) setStep(step + 1);
+  };
+
+  const handleBack = () => {
+    if (step > 1) {
+      setStep(step - 1);
+      // Limpiar datos del paso actual si es necesario
+      if (step === 2) {
+        setBooking({ ...booking, service: null });
+      } else if (step === 3) {
+        setBooking({ ...booking, date: '', time: '' });
+      } else if (step === 4) {
+        setBooking({ ...booking, name: '', phone: '', email: '' });
+      }
+    }
   };
 
   const handleConfirm = async () => {
@@ -93,20 +148,53 @@ const BookingSystem = () => {
     try {
       setLoading(true);
       
+      console.log(`🔒 Verificando disponibilidad final para ${booking.barber.name} - ${booking.date} ${booking.time}`);
+      
+      // VALIDACIÓN FINAL DE DISPONIBILIDAD
+      const isAvailable = await checkAvailability(booking.barber.id, booking.date, booking.time);
+      
+      if (!isAvailable) {
+        alert(`⚠️ Lo sentimos, el horario ${booking.time} del ${new Date(booking.date).toLocaleDateString('es-AR')} con ${booking.barber.name} ya fue reservado por otro cliente. Por favor elige otro horario.`);
+        
+        // Recargar horarios ocupados para actualizar la vista
+        await loadBookedTimes();
+        
+        // Volver al paso 3 para que elija otra hora
+        setStep(3);
+        setBooking({ ...booking, time: '' }); // Limpiar hora seleccionada
+        return;
+      }
+
+      console.log('✅ Horario disponible, creando turno...');
+
+      // Crear el turno
       await createAppointment({
         barber_id: booking.barber.id,
-        service_id: booking.service.id,
+        service_id: booking.service.service.id,
         date: booking.date,
         time: booking.time,
         customer_name: booking.name,
         customer_phone: booking.phone,
         customer_email: booking.email || undefined
       });
-
+      
+      console.log('🎉 Turno creado exitosamente');
       setStep(5);
-    } catch (error) {
-      console.error('Error creating appointment:', error);
-      alert('Error al crear el turno. Por favor intenta nuevamente.');
+      
+    } catch (error: any) {
+      console.error('❌ Error creating appointment:', error);
+      
+      // Manejo específico para error de constraint único
+      if (error?.code === '23505' || error?.message?.includes('unique_appointment')) {
+        alert(`⚠️ Este horario acaba de ser reservado por otro cliente. Por favor elige otro horario.`);
+        
+        // Recargar horarios y volver al paso 3
+        await loadBookedTimes();
+        setStep(3);
+        setBooking({ ...booking, time: '' });
+      } else {
+        alert('Error al crear el turno. Por favor intenta nuevamente.');
+      }
     } finally {
       setLoading(false);
     }
@@ -123,6 +211,7 @@ const BookingSystem = () => {
       phone: '',
       email: ''
     });
+    setServices([]);
     setBookedTimes([]);
   };
 
@@ -134,6 +223,11 @@ const BookingSystem = () => {
       case 4: return booking.name && booking.phone;
       default: return false;
     }
+  };
+
+  // Función para obtener el precio correcto (personalizado o base)
+  const getServicePrice = (barberService: any) => {
+    return barberService.custom_price || barberService.service.price;
   };
 
   if (loading && barbers.length === 0) {
@@ -172,7 +266,7 @@ const BookingSystem = () => {
               {barbers.map((barber) => (
                 <button
                   key={barber.id}
-                  onClick={() => setBooking({ ...booking, barber })}
+                  onClick={() => handleBarberSelect(barber)}
                   className={`w-full p-3 text-left rounded-lg border-2 transition-colors ${
                     booking.barber?.id === barber.id
                       ? 'border-blue-500 bg-blue-50'
@@ -197,30 +291,55 @@ const BookingSystem = () => {
         {/* Paso 2: Servicio */}
         {step === 2 && (
           <div className="space-y-4">
-            <h3 className="font-medium text-gray-900">¿Qué servicio querés?</h3>
-            <div className="space-y-2">
-              {services.map((service) => (
+            <h3 className="font-medium text-gray-900">
+              ¿Qué servicio querés con {booking.barber?.name}?
+            </h3>
+            
+            {loadingServices ? (
+              <div className="text-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-blue-600" />
+                <p className="text-gray-600">Cargando servicios...</p>
+              </div>
+            ) : services.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-500">Este peluquero no tiene servicios asignados.</p>
                 <button
-                  key={service.id}
-                  onClick={() => setBooking({ ...booking, service })}
-                  className={`w-full p-3 text-left rounded-lg border-2 transition-colors ${
-                    booking.service?.id === service.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
+                  onClick={() => setStep(1)}
+                  className="mt-2 text-blue-600 underline"
                 >
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="font-medium">{service.name}</div>
-                      <div className="text-sm text-gray-500">{service.duration} min</div>
-                    </div>
-                    <div className="font-semibold text-green-600">
-                      ${service.price.toLocaleString()}
-                    </div>
-                  </div>
+                  Elegir otro peluquero
                 </button>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {services.map((barberService) => (
+                  <button
+                    key={barberService.id}
+                    onClick={() => setBooking({ ...booking, service: barberService })}
+                    className={`w-full p-3 text-left rounded-lg border-2 transition-colors ${
+                      booking.service?.id === barberService.id
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <div className="font-medium">{barberService.service.name}</div>
+                        <div className="text-sm text-gray-500">
+                          {barberService.service.duration} min
+                          {barberService.custom_price && (
+                            <span className="text-blue-600 ml-1">(precio especial)</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="font-semibold text-green-600">
+                        ${getServicePrice(barberService).toLocaleString()}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -233,7 +352,7 @@ const BookingSystem = () => {
                 {getDates().map((date) => (
                   <button
                     key={date.value}
-                    onClick={() => setBooking({ ...booking, date: date.value, time: '' })}
+                    onClick={() => handleDateSelect(date.value)}
                     className={`p-2 text-center rounded border-2 transition-colors ${
                       booking.date === date.value
                         ? 'border-blue-500 bg-blue-50'
@@ -248,7 +367,14 @@ const BookingSystem = () => {
 
             {booking.date && (
               <div>
-                <h3 className="font-medium text-gray-900 mb-2">Elegí la hora</h3>
+                <h3 className="font-medium text-gray-900 mb-2">
+                  Elegí la hora
+                  {bookedTimes.length > 0 && (
+                    <span className="text-sm text-gray-500 ml-2">
+                      ({bookedTimes.length} horarios ocupados)
+                    </span>
+                  )}
+                </h3>
                 <div className="grid grid-cols-3 gap-2">
                   {times.map((time) => {
                     const isBooked = bookedTimes.includes(time);
@@ -308,11 +434,11 @@ const BookingSystem = () => {
               <h4 className="font-medium text-sm mb-2">Resumen:</h4>
               <div className="text-sm space-y-1">
                 <div>Peluquero: {booking.barber?.name}</div>
-                <div>Servicio: {booking.service?.name}</div>
+                <div>Servicio: {booking.service?.service.name}</div>
                 <div>Fecha: {new Date(booking.date).toLocaleDateString('es-AR')}</div>
                 <div>Hora: {booking.time}</div>
                 <div className="font-semibold text-green-600">
-                  Total: ${booking.service?.price.toLocaleString()}
+                  Total: ${getServicePrice(booking.service).toLocaleString()}
                 </div>
               </div>
             </div>
@@ -332,12 +458,12 @@ const BookingSystem = () => {
             <div className="bg-green-50 p-3 rounded-lg text-sm text-left">
               <div className="space-y-1">
                 <div><strong>{booking.barber?.name}</strong></div>
-                <div>{booking.service?.name}</div>
+                <div>{booking.service?.service.name}</div>
                 <div>{new Date(booking.date).toLocaleDateString('es-AR')} a las {booking.time}</div>
                 <div>Para: {booking.name}</div>
                 <div>Tel: {booking.phone}</div>
                 <div className="font-semibold text-green-600">
-                  Total: ${booking.service?.price.toLocaleString()}
+                  Total: ${getServicePrice(booking.service).toLocaleString()}
                 </div>
               </div>
             </div>
@@ -351,27 +477,40 @@ const BookingSystem = () => {
         )}
       </div>
 
-      {/* Botón continuar */}
+      {/* Botones navegación */}
       {step < 5 && (
         <div className="p-4 border-t">
-          <button
-            onClick={step === 4 ? handleConfirm : handleNext}
-            disabled={!canContinue() || loading}
-            className={`w-full py-2 px-4 rounded-lg transition-colors flex items-center justify-center ${
-              canContinue() && !loading
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                Procesando...
-              </>
-            ) : (
-              step === 4 ? 'Confirmar' : 'Continuar'
+          <div className="flex gap-2">
+            {/* Botón Atrás */}
+            {step > 1 && (
+              <button
+                onClick={handleBack}
+                className="flex-1 py-2 px-4 rounded-lg border-2 border-gray-300 text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                ← Atrás
+              </button>
             )}
-          </button>
+            
+            {/* Botón Continuar/Confirmar */}
+            <button
+              onClick={step === 4 ? handleConfirm : handleNext}
+              disabled={!canContinue() || loading}
+              className={`${step > 1 ? 'flex-1' : 'w-full'} py-2 px-4 rounded-lg transition-colors flex items-center justify-center ${
+                canContinue() && !loading
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Procesando...
+                </>
+              ) : (
+                step === 4 ? 'Confirmar Turno' : 'Continuar'
+              )}
+            </button>
+          </div>
         </div>
       )}
     </div>

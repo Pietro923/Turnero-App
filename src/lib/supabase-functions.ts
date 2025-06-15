@@ -550,3 +550,19 @@ export async function getAvailableServicesForBarber(barberId: number) {
     throw error
   }
 }
+
+export async function checkAvailability(barberId: number, date: string, time: string) {
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('id')
+    .eq('barber_id', barberId)
+    .eq('date', date)
+    .eq('time', time)
+    .in('status', ['confirmed', 'pending']) // Solo turnos activos
+    .limit(1)
+
+  if (error) throw error
+  
+  // Si encuentra algún registro, está ocupado
+  return data.length === 0
+}
