@@ -85,20 +85,21 @@ const AdminPanel = () => {
   }, [filters.date]);
 
 useEffect(() => {
+  // Solo auto-refresh en la pestaña de turnos
   if (activeTab !== 'turnos') return;
   
-  console.log('🔄 Configurando auto-refresh cada 5 minutos');
+  console.log('🔄 Auto-refresh configurado: recarga de página cada 5 minutos');
   
   const interval = setInterval(() => {
-    console.log('⏰ Auto-refresh ejecutándose...');
-    loadData(); // Ya no necesita setLastRefresh aquí porque loadData lo hace
-  }, 5 * 60 * 1000);
+    console.log('⏰ Auto-refresh: Recargando página...');
+    window.location.reload();
+  }, 5 * 60 * 1000); // 5 minutos
   
   return () => {
     console.log('🛑 Limpiando auto-refresh');
     clearInterval(interval);
   };
-}, [activeTab, filters]);
+}, [activeTab]); // Solo activeTab como dependencia
 
   // MODIFICAR la función loadData COMPLETA:
 const loadData = async () => {
@@ -289,7 +290,7 @@ return (
 {/* AGREGAR ESTO: */}
 {activeTab === 'turnos' && (
   <p className="text-xs text-green-600 mt-1">
-    🔄 Actualización automática cada 5 min • Última: {lastRefresh.toLocaleTimeString('es-AR')}
+    🔄 Recarga automática cada 5 min • Última actualización: {lastRefresh.toLocaleTimeString('es-AR')}
   </p>
 )}
               
