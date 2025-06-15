@@ -34,6 +34,7 @@ const AdminPanel = () => {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<number | null>(null);
   const [dateInput, setDateInput] = useState('');
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
   // Referencias para controlar modales con atajos
   const manualDialogRef = useRef<HTMLButtonElement>(null);
@@ -83,16 +84,33 @@ const AdminPanel = () => {
     setDateInput(filters.date);
   }, [filters.date]);
 
-  const loadData = async () => {
+useEffect(() => {
+  if (activeTab !== 'turnos') return;
+  
+  console.log('🔄 Configurando auto-refresh cada 5 minutos');
+  
+  const interval = setInterval(() => {
+    console.log('⏰ Auto-refresh ejecutándose...');
+    loadData(); // Ya no necesita setLastRefresh aquí porque loadData lo hace
+  }, 5 * 60 * 1000);
+  
+  return () => {
+    console.log('🛑 Limpiando auto-refresh');
+    clearInterval(interval);
+  };
+}, [activeTab, filters]);
+
+  // MODIFICAR la función loadData COMPLETA:
+const loadData = async () => {
   if (filters.date && (filters.date.length < 10 || isNaN(Date.parse(filters.date)))) {
     console.log('Fecha incompleta o inválida, esperando...');
     return;
   }
-
+  
   try {
     setLoading(true);
+    console.log('📊 Cargando datos del panel...');
     
-    // CAMBIAR ESTA LÍNEA:
     const [appointmentsData, barbersData, servicesData, statsData] = await Promise.all([
       getAllAppointments({
         date: filters.date || undefined,
@@ -101,16 +119,19 @@ const AdminPanel = () => {
         limit: 50
       }),
       getBarbers(),
-      getServices(), // ← AGREGAR ESTA LÍNEA
+      getServices(),
       getAppointmentStats()
     ]);
-
+    
     setAppointments(appointmentsData);
     setBarbers(barbersData);
-    setServices(servicesData); // ← AGREGAR ESTA LÍNEA
+    setServices(servicesData);
     setStats(statsData);
     
-    console.log('🎯 Servicios cargados:', servicesData); // Para debug
+    // ✅ AGREGAR ESTA LÍNEA - Actualizar hora cada vez que se cargan los datos
+    setLastRefresh(new Date());
+    
+    console.log('✅ Datos actualizados exitosamente');
     
   } catch (error: any) {
     console.error('❌ Error loading data:', error);
@@ -227,12 +248,6 @@ const AdminPanel = () => {
     );
   }
 
-  // No olvides agregar estos imports al inicio:
-// import BarberManagementPanel from '@/components/Admin/BarberManagementPanel';
-
-// Y agregar este estado después de los otros estados:
-// const [activeTab, setActiveTab] = useState<'turnos' | 'peluqueros'>('turnos');
-
 return (
   <div className="min-h-screen bg-gray-50 p-4">
     <div className="max-w-7xl mx-auto space-y-6">
@@ -268,9 +283,15 @@ return (
               </div>
               
               <p className="text-gray-600">Gestiona los turnos de la peluquería</p>
-              <p className="text-xs text-gray-500 mt-1">
-                F1: Turno manual | F2: Caja | F3: Historial | Ctrl+R: Actualizar
-              </p>
+<p className="text-xs text-gray-500 mt-1">
+  F1: Turno manual | F2: Caja | F3: Historial | Ctrl+R: Actualizar
+</p>
+{/* AGREGAR ESTO: */}
+{activeTab === 'turnos' && (
+  <p className="text-xs text-green-600 mt-1">
+    🔄 Actualización automática cada 5 min • Última: {lastRefresh.toLocaleTimeString('es-AR')}
+  </p>
+)}
               
               {/* Pestañas - Solo mostrar Peluqueros si es Owner */}
               <div className="flex gap-2 mt-3">
@@ -321,6 +342,7 @@ return (
               <button
                 onClick={loadData}
                 className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                title={`Última actualización: ${lastRefresh.toLocaleTimeString('es-AR')}`}
               >
                 <RefreshCw className="h-4 w-4" />
                 Actualizar
