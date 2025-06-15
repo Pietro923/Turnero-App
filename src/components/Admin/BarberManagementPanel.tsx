@@ -3,11 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Edit, 
-  Trash2, 
-  Users, 
+  Trash2,  
   Scissors, 
-  DollarSign,
-  Save,
   X,
   Check
 } from 'lucide-react';
@@ -27,6 +24,7 @@ import {
   getBarbersWithServices,
   getServices,
   createBarber,
+  createService,
   updateBarber,
   deleteBarber,
   assignServiceToBarber,
@@ -34,6 +32,7 @@ import {
   updateBarberServicePrice,
   getAvailableServicesForBarber
 } from '@/lib/supabase-functions';
+import { updateService, deleteService } from '@/lib/supabase-functions';
 
 const BarberManagementPanel = () => {
   const [barbers, setBarbers] = useState<any[]>([]);
@@ -41,18 +40,29 @@ const BarberManagementPanel = () => {
   const [loading, setLoading] = useState(true);
   const [editingBarber, setEditingBarber] = useState<any>(null);
   const [editingService, setEditingService] = useState<any>(null);
-  
+  const [editingGlobalService, setEditingGlobalService] = useState<any>(null);
+
   // Estados para modales
   const [showNewBarberModal, setShowNewBarberModal] = useState(false);
+  const [showNewServiceModal, setShowNewServiceModal] = useState(false);
   const [showAssignServiceModal, setShowAssignServiceModal] = useState(false);
+  const [showDeleteServiceModal, setShowDeleteServiceModal] = useState(false);
+  const [serviceToDelete, setServiceToDelete] = useState<any>(null);
   const [selectedBarberForService, setSelectedBarberForService] = useState<any>(null);
   const [availableServices, setAvailableServices] = useState<any[]>([]);
 
   // Formulario nuevo peluquero
   const [newBarberForm, setNewBarberForm] = useState({
     name: '',
-    emoji: '',
+    emoji: '👨‍🦱',
     specialty: ''
+  });
+
+  // Formulario nuevo servicio
+  const [newServiceForm, setNewServiceForm] = useState({
+    name: '',
+    duration: '',
+    price: ''
   });
 
   // Formulario asignar servicio
@@ -85,14 +95,14 @@ const BarberManagementPanel = () => {
   const handleCreateBarber = async () => {
     try {
       if (!newBarberForm.name) {
-        alert('Nombre y emoji son obligatorios');
+        alert('Nombre es obligatorio');
         return;
       }
-
+      
       await createBarber(newBarberForm);
       
       // Resetear formulario
-      setNewBarberForm({ name: '', emoji: '', specialty: '' });
+      setNewBarberForm({ name: '', emoji: '👨‍🦱', specialty: '' });
       setShowNewBarberModal(false);
       
       // Recargar datos
@@ -100,6 +110,31 @@ const BarberManagementPanel = () => {
     } catch (error) {
       console.error('Error creating barber:', error);
       alert('Error creando peluquero');
+    }
+  };
+
+  const handleCreateService = async () => {
+    try {
+      if (!newServiceForm.name || !newServiceForm.duration || !newServiceForm.price) {
+        alert('Todos los campos son obligatorios');
+        return;
+      }
+
+      await createService({
+        name: newServiceForm.name,
+        duration: parseInt(newServiceForm.duration),
+        price: parseInt(newServiceForm.price)
+      });
+      
+      // Resetear formulario
+      setNewServiceForm({ name: '', duration: '', price: '' });
+      setShowNewServiceModal(false);
+      
+      // Recargar datos
+      loadData();
+    } catch (error) {
+      console.error('Error creating service:', error);
+      alert('Error creando servicio');
     }
   };
 
@@ -116,7 +151,7 @@ const BarberManagementPanel = () => {
 
   const handleDeleteBarber = async (barberId: number, barberName: string) => {
     if (!confirm(`¿Estás seguro de eliminar a ${barberName}?`)) return;
-
+    
     try {
       await deleteBarber(barberId);
       loadData();
@@ -127,32 +162,32 @@ const BarberManagementPanel = () => {
   };
 
   const handleAssignService = async () => {
-    try {
-      if (!assignServiceForm.serviceId) {
-        alert('Selecciona un servicio');
-        return;
-      }
-
-      const customPrice = assignServiceForm.customPrice 
-        ? parseInt(assignServiceForm.customPrice) 
-        : null;
-
-      await assignServiceToBarber(
-        selectedBarberForService.id,
-        parseInt(assignServiceForm.serviceId),
-        customPrice
-      );
-
-      // Resetear y cerrar
-      setAssignServiceForm({ serviceId: '', customPrice: '' });
-      setShowAssignServiceModal(false);
-      setSelectedBarberForService(null);
-      loadData();
-    } catch (error) {
-      console.error('Error assigning service:', error);
-      alert('Error asignando servicio');
+  try {
+    if (!assignServiceForm.serviceId) {
+      alert('Selecciona un servicio');
+      return;
     }
-  };
+    
+    const customPrice = assignServiceForm.customPrice 
+      ? parseInt(assignServiceForm.customPrice) 
+      : undefined; // ← Cambiar null por undefined
+    
+    await assignServiceToBarber(
+      selectedBarberForService.id,
+      parseInt(assignServiceForm.serviceId),
+      customPrice
+    );
+    
+    // Resetear y cerrar
+    setAssignServiceForm({ serviceId: '', customPrice: '' });
+    setShowAssignServiceModal(false);
+    setSelectedBarberForService(null);
+    loadData();
+  } catch (error) {
+    console.error('Error assigning service:', error);
+    alert('Error asignando servicio');
+  }
+};
 
   const handleRemoveService = async (barberId: number, serviceId: number) => {
     try {
@@ -192,6 +227,37 @@ const BarberManagementPanel = () => {
     return barberService.custom_price || barberService.service.price;
   };
 
+  // 3. AGREGAR ESTAS FUNCIONES DESPUÉS DE handleCreateService:
+const handleUpdateService = async (serviceId: number, updates: any) => {
+  try {
+    await updateService(serviceId, updates);
+    setEditingGlobalService(null);
+    loadData();
+  } catch (error) {
+    console.error('Error updating service:', error);
+    alert('Error actualizando servicio');
+  }
+};
+
+const handleDeleteService = async () => {
+  if (!serviceToDelete) return;
+  
+  try {
+    await deleteService(serviceToDelete.id);
+    setShowDeleteServiceModal(false);
+    setServiceToDelete(null);
+    loadData();
+  } catch (error) {
+    console.error('Error deleting service:', error);
+    alert('Error eliminando servicio');
+  }
+};
+
+const openDeleteServiceModal = (service: any) => {
+  setServiceToDelete(service);
+  setShowDeleteServiceModal(true);
+};
+
   if (loading) {
     return (
       <div className="p-8 text-center">
@@ -210,44 +276,186 @@ const BarberManagementPanel = () => {
           <p className="text-gray-600">Administra peluqueros, servicios y precios</p>
         </div>
         
-        <Dialog open={showNewBarberModal} onOpenChange={setShowNewBarberModal}>
-          <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Nuevo Peluquero
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Agregar Nuevo Peluquero</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label>Nombre *</Label>
-                <Input
-                  value={newBarberForm.name}
-                  onChange={(e) => setNewBarberForm({...newBarberForm, name: e.target.value})}
-                  placeholder="Nombre del peluquero"
-                />
+        <div className="flex gap-2">
+          {/* Botón Nuevo Servicio */}
+          <Dialog open={showNewServiceModal} onOpenChange={setShowNewServiceModal}>
+            <DialogTrigger asChild>
+              <Button className="bg-green-600 hover:bg-green-700">
+                <Plus className="h-4 w-4 mr-2" />
+                Nuevo Servicio
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Agregar Nuevo Servicio</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Nombre del Servicio *</Label>
+                  <Input
+                    value={newServiceForm.name}
+                    onChange={(e) => setNewServiceForm({...newServiceForm, name: e.target.value})}
+                    placeholder="Ej: Corte de pelo, Barba, Color"
+                  />
+                </div>
+                <div>
+                  <Label>Duración (minutos) *</Label>
+                  <Input
+                    type="number"
+                    value={newServiceForm.duration}
+                    onChange={(e) => setNewServiceForm({...newServiceForm, duration: e.target.value})}
+                    placeholder="Ej: 30, 45, 60"
+                  />
+                </div>
+                <div>
+                  <Label>Precio *</Label>
+                  <Input
+                    type="number"
+                    value={newServiceForm.price}
+                    onChange={(e) => setNewServiceForm({...newServiceForm, price: e.target.value})}
+                    placeholder="Ej: 3500, 4500, 6000"
+                  />
+                </div>
               </div>
-              <div>
-                <Label>Especialidad</Label>
-                <Input
-                  value={newBarberForm.specialty}
-                  onChange={(e) => setNewBarberForm({...newBarberForm, specialty: e.target.value})}
-                  placeholder="Ej: Cortes modernos, Barbería clásica"
-                />
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline">Cancelar</Button>
+                </DialogClose>
+                <Button onClick={handleCreateService} className="bg-green-600 hover:bg-green-700">
+                  Crear Servicio
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Botón Nuevo Peluquero */}
+          <Dialog open={showNewBarberModal} onOpenChange={setShowNewBarberModal}>
+            <DialogTrigger asChild>
+              <Button className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="h-4 w-4 mr-2" />
+                Nuevo Peluquero
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Agregar Nuevo Peluquero</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <Label>Nombre *</Label>
+                  <Input
+                    value={newBarberForm.name}
+                    onChange={(e) => setNewBarberForm({...newBarberForm, name: e.target.value})}
+                    placeholder="Nombre del peluquero"
+                  />
+                </div>
+                <div>
+                  <Label>Emoji</Label>
+                  <Input
+                    value={newBarberForm.emoji}
+                    onChange={(e) => setNewBarberForm({...newBarberForm, emoji: e.target.value})}
+                    placeholder="👨‍🦱"
+                  />
+                </div>
+                <div>
+                  <Label>Especialidad</Label>
+                  <Input
+                    value={newBarberForm.specialty}
+                    onChange={(e) => setNewBarberForm({...newBarberForm, specialty: e.target.value})}
+                    placeholder="Ej: Cortes modernos, Barbería clásica"
+                  />
+                </div>
               </div>
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Cancelar</Button>
-              </DialogClose>
-              <Button onClick={handleCreateBarber}>Crear Peluquero</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline">Cancelar</Button>
+                </DialogClose>
+                <Button onClick={handleCreateBarber}>Crear Peluquero</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
+
+      {/* Lista de Servicios Disponibles */}
+      {/* Lista de Servicios Disponibles */}
+<div className="bg-white rounded-lg shadow-sm border p-6">
+  <h3 className="text-lg font-bold text-gray-900 mb-4">
+    Servicios Disponibles ({allServices.length})
+  </h3>
+  <div className="grid gap-3">
+    {allServices.map((service) => (
+      <div key={service.id} className="flex items-center justify-between bg-gray-50 p-3 rounded-lg">
+        <div className="flex items-center gap-3 flex-1">
+          <Scissors className="h-4 w-4 text-gray-600" />
+          <div className="flex-1">
+            {editingGlobalService === service.id ? (
+              <div className="grid grid-cols-3 gap-2">
+                <Input
+                  defaultValue={service.name}
+                  placeholder="Nombre"
+                  onBlur={(e) => handleUpdateService(service.id, { name: e.target.value })}
+                />
+                <Input
+                  type="number"
+                  defaultValue={service.duration}
+                  placeholder="Duración"
+                  onBlur={(e) => handleUpdateService(service.id, { duration: parseInt(e.target.value) })}
+                />
+                <Input
+                  type="number"
+                  defaultValue={service.price}
+                  placeholder="Precio"
+                  onBlur={(e) => handleUpdateService(service.id, { price: parseInt(e.target.value) })}
+                />
+              </div>
+            ) : (
+              <div>
+                <span className="font-medium">{service.name}</span>
+                <span className="text-sm text-gray-500 ml-2">
+                  ({service.duration} min)
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {editingGlobalService === service.id ? (
+            <Button
+              size="sm"
+              onClick={() => setEditingGlobalService(null)}
+              variant="outline"
+            >
+              <Check className="h-4 w-4" />
+            </Button>
+          ) : (
+            <>
+              <span className="font-semibold text-green-600 mr-2">
+                ${service.price.toLocaleString()}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setEditingGlobalService(service.id)}
+              >
+                <Edit className="h-4 w-4" />
+              </Button>
+              <Button
+  size="sm"
+  variant="outline"
+  onClick={() => openDeleteServiceModal(service)}
+  className="text-red-600 hover:bg-red-50"
+>
+  <Trash2 className="h-4 w-4" />
+</Button>
+            </>
+          )}
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
 
       {/* Lista de Peluqueros */}
       <div className="grid gap-6">
@@ -426,6 +634,35 @@ const BarberManagementPanel = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+{/* Modal Confirmar Eliminación de Servicio */}
+<Dialog open={showDeleteServiceModal} onOpenChange={setShowDeleteServiceModal}>
+  <DialogContent>
+    <DialogHeader>
+      <DialogTitle>Eliminar Servicio</DialogTitle>
+    </DialogHeader>
+    <div className="py-4">
+      <p className="text-gray-600">
+        ¿Estás seguro de que quieres eliminar el servicio{' '}
+        <span className="font-semibold">"{serviceToDelete?.name}"</span>?
+      </p>
+      <p className="text-sm text-red-600 mt-2">
+        ⚠️ Esto eliminará el servicio de todos los peluqueros que lo tengan asignado.
+      </p>
+    </div>
+    <DialogFooter>
+      <DialogClose asChild>
+        <Button variant="outline">Cancelar</Button>
+      </DialogClose>
+      <Button 
+        onClick={handleDeleteService}
+        className="bg-red-600 hover:bg-red-700 text-white"
+      >
+        Eliminar Servicio
+      </Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
     </div>
   );
 };

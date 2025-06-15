@@ -517,20 +517,35 @@ export async function updateBarberServicePrice(barberId: number, serviceId: numb
 
 // Función para obtener servicios disponibles para asignar a un peluquero
 export async function getAvailableServicesForBarber(barberId: number) {
-  const { data, error } = await supabase
-    .from('services')
-    .select(`
-      *,
-      barber_services!left (
-        id,
-        active
-      )
-    `)
-    .eq('active', true)
-    .or(`barber_services.barber_id.neq.${barberId},barber_services.active.eq.false,barber_services.id.is.null`)
+  try {
+    // 1. Obtener todos los servicios activos
+    const { data: allServices, error: servicesError } = await supabase
+      .from('services')
+      .select('*')
+      .eq('active', true)
+      .order('name')
 
-  if (error) throw error
-  return data.filter(service => 
-    !service.barber_services?.some((bs: any) => bs.active)
-  )
+    if (servicesError) throw servicesError
+
+    // 2. Obtener servicios ya asignados a este peluquero
+    const { data: assignedServices, error: assignedError } = await supabase
+      .from('barber_services')
+      .select('service_id')
+      .eq('barber_id', barberId)
+      .eq('active', true)
+
+    if (assignedError) throw assignedError
+
+    // 3. Filtrar servicios no asignados
+    const assignedServiceIds = assignedServices.map(bs => bs.service_id)
+    const availableServices = allServices.filter(service => 
+      !assignedServiceIds.includes(service.id)
+    )
+
+    return availableServices
+
+  } catch (error) {
+    console.error('Error in getAvailableServicesForBarber:', error)
+    throw error
+  }
 }
