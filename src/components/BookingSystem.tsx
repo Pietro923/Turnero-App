@@ -2,7 +2,7 @@
 "use client"
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, Loader2 } from 'lucide-react';
-import { getBarbers, getBookedTimes, getServicesByBarber, checkAvailability } from '@/lib/supabase-functions';
+import { getBarbers, getBookedTimes, createAppointment, getServicesByBarber, checkAvailability } from '@/lib/supabase-functions';
 import type { Barber } from '@/lib/supabase';
 import { sendNewAppointmentNotification } from '@/lib/emailjs';
 
@@ -169,9 +169,8 @@ const BookingSystem = () => {
 
     console.log('✅ Horario disponible, creando turno...');
 
-    {/* 
     // Crear el turno
-    const newAppointment = await createAppointment({
+    await createAppointment({
       barber_id: booking.barber.id,
       service_id: booking.service.service.id,
       date: booking.date,
@@ -180,7 +179,6 @@ const BookingSystem = () => {
       customer_phone: booking.phone,
       customer_email: booking.email || undefined
     });
-    */}
 
     console.log('🎉 Turno creado exitosamente');
 

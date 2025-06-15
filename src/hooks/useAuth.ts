@@ -12,6 +12,7 @@ interface AuthContextType {
   loading: boolean
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
+  clearAuthCache: () => void 
   isOwner: boolean
   isEmployee: boolean
 }
@@ -25,51 +26,83 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const getInitialSession = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
+  try {
+    console.log('🔍 Verificando sesión inicial...');
+    
+    const { data: { session }, error } = await supabase.auth.getSession()
+    
+    if (error) {
+      console.error('❌ Error obteniendo sesión:', error);
+      return;
+    }
+    
+    if (session?.user) {
+      console.log('✅ Sesión encontrada para:', session.user.email);
+      setUser(session.user)
+      setSession(session)
       
-      if (session?.user) {
+      const userData = await getCurrentUser()
+      if (userData?.profile) {
+        console.log('✅ Perfil cargado:', userData.profile.role);
+        setProfile(userData.profile)
+      } else {
+        console.log('⚠️ No se encontró perfil para el usuario');
+        setProfile(null)
+      }
+    } else {
+      console.log('ℹ️ No hay sesión activa');
+      setUser(null)
+      setSession(null)
+      setProfile(null)
+    }
+  } catch (error) {
+    console.error('❌ Error getting initial session:', error)
+    setUser(null)
+    setSession(null)
+    setProfile(null)
+  } finally {
+    setLoading(false)
+  }
+}
+
+ useEffect(() => {
+  // Obtener sesión inicial
+  getInitialSession()
+
+  // Escuchar cambios de autenticación
+  const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    async (event, session) => {
+      console.log('🔄 Auth state changed:', event, session?.user?.email)
+      
+      if (event === 'SIGNED_OUT' || !session) {
+        console.log('👋 Usuario desconectado');
+        setUser(null)
+        setSession(null)
+        setProfile(null)
+        setLoading(false)
+        return
+      }
+      
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        console.log('👤 Usuario conectado/token renovado');
         setUser(session.user)
         setSession(session)
         
-        const userData = await getCurrentUser()
-        setProfile(userData?.profile || null)
-      }
-    } catch (error) {
-      console.error('Error getting initial session:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    // Obtener sesión inicial
-    getInitialSession()
-
-    // Escuchar cambios de autenticación
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state changed:', event, session?.user?.email)
-        
-        if (session?.user) {
-          setUser(session.user)
-          setSession(session)
-          
-          // Obtener perfil del usuario
+        try {
           const userData = await getCurrentUser()
           setProfile(userData?.profile || null)
-        } else {
-          setUser(null)
-          setSession(null)
+        } catch (error) {
+          console.error('❌ Error cargando perfil:', error);
           setProfile(null)
         }
-        
-        setLoading(false)
       }
-    )
+      
+      setLoading(false)
+    }
+  )
 
-    return () => subscription.unsubscribe()
-  }, [])
+  return () => subscription.unsubscribe()
+}, [])
 
   const handleSignIn = async (email: string, password: string) => {
     try {
@@ -87,32 +120,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // 2. AGREGAR función para limpiar caché:
+const clearAuthCache = () => {
+  console.log('🗑️ Limpiando caché de autenticación...');
+  setUser(null);
+  setSession(null);
+  setProfile(null);
+  setLoading(false);
+  
+  // Limpiar localStorage de Supabase
+  localStorage.removeItem('supabase.auth.token');
+  
+  // Forzar refresh de la página
+  window.location.reload();
+};
+
   const handleSignOut = async () => {
-    try {
-      setLoading(true)
-      await signOut()
-      
-      setUser(null)
-      setSession(null)
-      setProfile(null)
-    } catch (error) {
-      console.error('Sign out error:', error)
-      throw error
-    } finally {
-      setLoading(false)
-    }
+  try {
+    setLoading(true);
+    console.log('🚪 Cerrando sesión...');
+    
+    await signOut();
+    
+    // Limpiar estado inmediatamente
+    setUser(null);
+    setSession(null);
+    setProfile(null);
+    
+    console.log('✅ Sesión cerrada exitosamente');
+  } catch (error) {
+    console.error('❌ Error signing out:', error);
+    // Si falla el signOut, limpiar manualmente
+    clearAuthCache();
+  } finally {
+    setLoading(false);
   }
+};
 
   const value: AuthContextType = {
-    user,
-    profile,
-    session,
-    loading,
-    signIn: handleSignIn,
-    signOut: handleSignOut,
-    isOwner: profile?.role === 'owner' && profile?.active === true,
-    isEmployee: profile?.role === 'employee' && profile?.active === true
-  }
+  user,
+  profile,
+  session,
+  loading,
+  signIn: handleSignIn,
+  signOut: handleSignOut,
+  clearAuthCache, 
+  isOwner: profile?.role === 'owner' && profile?.active === true,
+  isEmployee: profile?.role === 'employee' && profile?.active === true
+}
+
 
   return React.createElement(
     AuthContext.Provider,
