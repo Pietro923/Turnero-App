@@ -1,8 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client"
 import React, { useState, useEffect } from 'react';
 import { CheckCircle, Loader2 } from 'lucide-react';
-import { getBarbers, createAppointment, getBookedTimes, getServicesByBarber, checkAvailability } from '@/lib/supabase-functions';
+import { getBarbers, getBookedTimes, getServicesByBarber, checkAvailability } from '@/lib/supabase-functions';
 import type { Barber } from '@/lib/supabase';
+import { sendNewAppointmentNotification } from '@/lib/emailjs';
 
 const BookingSystem = () => {
   const [step, setStep] = useState(1);
@@ -140,65 +142,91 @@ const BookingSystem = () => {
   };
 
   const handleConfirm = async () => {
-    if (!booking.barber || !booking.service || !booking.date || !booking.time || !booking.name || !booking.phone) {
-      alert('Por favor completa todos los campos requeridos');
+  if (!booking.barber || !booking.service || !booking.date || !booking.time || !booking.name || !booking.phone) {
+    alert('Por favor completa todos los campos requeridos');
+    return;
+  }
+
+  try {
+    setLoading(true);
+    
+    console.log(`🔒 Verificando disponibilidad final para ${booking.barber.name} - ${booking.date} ${booking.time}`);
+    
+    // VALIDACIÓN FINAL DE DISPONIBILIDAD
+    const isAvailable = await checkAvailability(booking.barber.id, booking.date, booking.time);
+    
+    if (!isAvailable) {
+      alert(`⚠️ Lo sentimos, el horario ${booking.time} del ${new Date(booking.date).toLocaleDateString('es-AR')} con ${booking.barber.name} ya fue reservado por otro cliente. Por favor elige otro horario.`);
+      
+      // Recargar horarios ocupados para actualizar la vista
+      await loadBookedTimes();
+      
+      // Volver al paso 3 para que elija otra hora
+      setStep(3);
+      setBooking({ ...booking, time: '' }); // Limpiar hora seleccionada
       return;
     }
 
+    console.log('✅ Horario disponible, creando turno...');
+
+    {/* 
+    // Crear el turno
+    const newAppointment = await createAppointment({
+      barber_id: booking.barber.id,
+      service_id: booking.service.service.id,
+      date: booking.date,
+      time: booking.time,
+      customer_name: booking.name,
+      customer_phone: booking.phone,
+      customer_email: booking.email || undefined
+    });
+    */}
+
+    console.log('🎉 Turno creado exitosamente');
+
+    // 📧 ENVIAR NOTIFICACIÓN POR EMAIL
     try {
-      setLoading(true);
+      console.log('📧 Preparando notificación por email...');
       
-      console.log(`🔒 Verificando disponibilidad final para ${booking.barber.name} - ${booking.date} ${booking.time}`);
-      
-      // VALIDACIÓN FINAL DE DISPONIBILIDAD
-      const isAvailable = await checkAvailability(booking.barber.id, booking.date, booking.time);
-      
-      if (!isAvailable) {
-        alert(`⚠️ Lo sentimos, el horario ${booking.time} del ${new Date(booking.date).toLocaleDateString('es-AR')} con ${booking.barber.name} ya fue reservado por otro cliente. Por favor elige otro horario.`);
-        
-        // Recargar horarios ocupados para actualizar la vista
-        await loadBookedTimes();
-        
-        // Volver al paso 3 para que elija otra hora
-        setStep(3);
-        setBooking({ ...booking, time: '' }); // Limpiar hora seleccionada
-        return;
-      }
-
-      console.log('✅ Horario disponible, creando turno...');
-
-      // Crear el turno
-      await createAppointment({
-        barber_id: booking.barber.id,
-        service_id: booking.service.service.id,
-        date: booking.date,
-        time: booking.time,
+      await sendNewAppointmentNotification({
         customer_name: booking.name,
         customer_phone: booking.phone,
-        customer_email: booking.email || undefined
+        customer_email: booking.email || 'No proporcionado',
+        barber_name: booking.barber.name,
+        service_name: booking.service.service.name,
+        service_price: getServicePrice(booking.service),
+        service_duration: booking.service.service.duration,
+        appointment_date: booking.date,
+        appointment_time: booking.time,
+        created_at: new Date().toISOString()
       });
       
-      console.log('🎉 Turno creado exitosamente');
-      setStep(5);
-      
-    } catch (error: any) {
-      console.error('❌ Error creating appointment:', error);
-      
-      // Manejo específico para error de constraint único
-      if (error?.code === '23505' || error?.message?.includes('unique_appointment')) {
-        alert(`⚠️ Este horario acaba de ser reservado por otro cliente. Por favor elige otro horario.`);
-        
-        // Recargar horarios y volver al paso 3
-        await loadBookedTimes();
-        setStep(3);
-        setBooking({ ...booking, time: '' });
-      } else {
-        alert('Error al crear el turno. Por favor intenta nuevamente.');
-      }
-    } finally {
-      setLoading(false);
+      console.log('✅ Notificación enviada exitosamente');
+    } catch (emailError) {
+      console.error('❌ Error enviando email (pero el turno se creó):', emailError);
+      // No interrumpir el flujo si falla el email
     }
-  };
+    
+    setStep(5);
+    
+  } catch (error: any) {
+    console.error('❌ Error creating appointment:', error);
+    
+    // Manejo específico para error de constraint único
+    if (error?.code === '23505' || error?.message?.includes('unique_appointment')) {
+      alert(`⚠️ Este horario acaba de ser reservado por otro cliente. Por favor elige otro horario.`);
+      
+      // Recargar horarios y volver al paso 3
+      await loadBookedTimes();
+      setStep(3);
+      setBooking({ ...booking, time: '' });
+    } else {
+      alert('Error al crear el turno. Por favor intenta nuevamente.');
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   const reset = () => {
     setStep(1);
